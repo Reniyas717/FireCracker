@@ -10,20 +10,21 @@ import { Send, X } from 'lucide-react';
 export default function MessageInput() {
   const messageInputOpen = useStore((s) => s.messageInputOpen);
   const setMessageInputOpen = useStore((s) => s.setMessageInputOpen);
+  const customMessage = useStore((s) => s.customMessage);
+  const setCustomMessage = useStore((s) => s.setCustomMessage);
 
-  // We don't use global state for custom message anymore, just local state for the input
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState(customMessage || '');
 
   // Auto focus input when opened
   useEffect(() => {
     if (messageInputOpen) {
-      setInputValue(''); // Reset on open
+      setInputValue(customMessage || ''); // Reset to existing message on open
       setTimeout(() => {
         const input = document.getElementById('message-input');
         if (input) input.focus();
       }, 50);
     }
-  }, [messageInputOpen]);
+  }, [messageInputOpen, customMessage]);
 
   if (!messageInputOpen) return null;
 
@@ -31,7 +32,10 @@ export default function MessageInput() {
     e.preventDefault();
     const trimmed = inputValue.trim().slice(0, 15);
     
-    // Dispatch event to fire the rocket at the pending coordinates
+    // Save to global store
+    setCustomMessage(trimmed);
+
+    // If there is a pending position (i.e. clicked sky before setting message)
     if (trimmed && window.pendingRocketPosition) {
       const { x, y } = window.pendingRocketPosition;
       const event = new CustomEvent('fire-message-rocket', { detail: { x, y, message: trimmed } });
@@ -110,7 +114,7 @@ export default function MessageInput() {
               disabled={!inputValue.trim()}
               className="flex-1 py-4 text-sm font-bold text-black bg-gradient-to-r from-amber-400 to-orange-400 rounded-xl hover:from-amber-300 hover:to-orange-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-[0_4px_20px_rgba(251,191,36,0.3)] flex justify-center items-center gap-2"
             >
-              Fire Rocket
+              {window.pendingRocketPosition ? 'Fire Rocket' : 'Save Message'}
             </button>
           </div>
         </form>
