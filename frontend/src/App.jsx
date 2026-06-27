@@ -5,6 +5,7 @@ import MessageInput from './components/MessageInput.jsx';
 import RoomPanel from './components/RoomPanel.jsx';
 import { useStore } from './store/useStore.js';
 import { Settings, Users } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 function App() {
   const toggleRoomPanel = useStore((s) => s.toggleRoomPanel);
@@ -21,7 +22,7 @@ function App() {
         {/* Branding */}
         <div className="flex flex-col">
           <h1 className="text-2xl font-black tracking-tighter bg-gradient-to-br from-amber-200 via-amber-400 to-orange-500 bg-clip-text text-transparent drop-shadow-md">
-            AATISHBAAZI
+            FIRECRACKER
           </h1>
           <p className="text-[10px] text-white/40 font-semibold tracking-[0.2em] uppercase mt-0.5">
             Virtual Night Sky
@@ -62,6 +63,7 @@ function App() {
       <SettingsPanel />
       <MessageInput />
       <RoomPanel />
+      <Analytics />
     </div>
   );
 }

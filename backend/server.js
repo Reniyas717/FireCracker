@@ -29,5 +29,5 @@ app.get('/health', (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-  console.log(`Aatishbaazi backend running on port ${PORT}`);
+  console.log(`FireCracker backend running on port ${PORT}`);
 });
