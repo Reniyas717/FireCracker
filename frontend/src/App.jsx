@@ -3,20 +3,23 @@ import InventoryHUD from './components/InventoryHUD.jsx';
 import SettingsPanel from './components/SettingsPanel.jsx';
 import MessageInput from './components/MessageInput.jsx';
 import RoomPanel from './components/RoomPanel.jsx';
+import CharacterCustomizer from './components/CharacterCustomizer.jsx';
 import { useStore } from './store/useStore.js';
-import { Settings, Users } from 'lucide-react';
+import { Settings, Users, User } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 
 function App() {
-  const toggleRoomPanel = useStore((s) => s.toggleRoomPanel);
-  const toggleSettings = useStore((s) => s.toggleSettings);
+  const toggleRoomPanel  = useStore((s) => s.toggleRoomPanel);
+  const toggleSettings   = useStore((s) => s.toggleSettings);
+  const toggleCustomizer = useStore((s) => s.toggleCustomizer);
+  const characterConfig  = useStore((s) => s.characterConfig);
 
   return (
     <div className="w-screen h-screen overflow-hidden bg-black font-sans text-white selection:bg-amber-500/30">
       {/* Full-screen night sky canvas */}
       <SkyCanvas />
 
-      {/* Structured Top Navigation HUD */}
+      {/* Top Navigation HUD */}
       <header className="fixed top-0 left-0 right-0 h-16 z-20 bg-gradient-to-b from-black/80 to-transparent pointer-events-none flex items-center justify-between px-6">
         
         {/* Branding */}
@@ -31,6 +34,28 @@ function App() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-3 pointer-events-auto">
+
+          {/* Character customizer button — shows face preview if photo set */}
+          <button
+            onClick={toggleCustomizer}
+            className="relative flex items-center justify-center w-10 h-10 rounded-full bg-white/5 border border-white/10 hover:bg-amber-500/15 hover:border-amber-500/30 transition-all duration-300 backdrop-blur-md text-white/70 hover:text-amber-400 group overflow-hidden"
+            title="Customize Character"
+          >
+            {characterConfig.faceImage ? (
+              <img
+                src={characterConfig.faceImage}
+                alt="character"
+                className="w-full h-full object-cover rounded-full"
+              />
+            ) : (
+              <User size={18} className="group-hover:scale-110 transition-transform" />
+            )}
+            {/* Gender indicator dot */}
+            <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black text-[6px] flex items-center justify-center font-bold ${
+              characterConfig.gender === 'female' ? 'bg-pink-500' : 'bg-blue-500'
+            }`} />
+          </button>
+
           <button
             onClick={toggleRoomPanel}
             className="flex items-center justify-center w-10 h-10 rounded-full bg-white/5 border border-white/10 hover:bg-white/15 hover:border-white/20 transition-all duration-300 backdrop-blur-md text-white/70 hover:text-white group"
@@ -56,13 +81,14 @@ function App() {
         </p>
       </div>
 
-      {/* Structured Inventory HUD */}
+      {/* Inventory HUD */}
       <InventoryHUD />
 
-      {/* UI Panels (Modals) */}
+      {/* UI Panels */}
       <SettingsPanel />
       <MessageInput />
       <RoomPanel />
+      <CharacterCustomizer />
       <Analytics />
     </div>
   );

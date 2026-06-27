@@ -4,10 +4,14 @@
  */
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { CRACKER_TYPES } from '../engine/CrackerConfigs.js';
 import { THEME_IDS } from '../engine/ThemeConfigs.js';
+import { DEFAULT_CHARACTER_CONFIG } from '../engine/CharacterSystem.js';
 
-export const useStore = create((set, get) => ({
+export const useStore = create(
+  persist(
+    (set, get) => ({
   // Selected cracker type
   selectedCracker: CRACKER_TYPES.ROCKET,
   setSelectedCracker: (type) => set({ selectedCracker: type }),
@@ -40,6 +44,17 @@ export const useStore = create((set, get) => ({
   showDebug: false,
   toggleDebug: () => set((s) => ({ showDebug: !s.showDebug })),
 
+  showCharacters: true,
+  setShowCharacters: (b) => set({ showCharacters: b }),
+
+  // Character customization
+  characterConfig: { ...DEFAULT_CHARACTER_CONFIG },
+  setCharacterConfig: (cfg) => set((s) => ({ characterConfig: { ...s.characterConfig, ...cfg } })),
+
+  // Character customizer panel
+  customizerOpen: false,
+  toggleCustomizer: () => set((s) => ({ customizerOpen: !s.customizerOpen })),
+
   // Panels
   settingsOpen: false,
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
@@ -59,4 +74,18 @@ export const useStore = create((set, get) => ({
   // Stats
   activeParticles: 0,
   setActiveParticles: (n) => set({ activeParticles: n }),
-}));
+    }),
+    {
+      name: 'firecracker-settings',
+      partialize: (state) => ({
+        characterConfig: state.characterConfig,
+        currentTheme: state.currentTheme,
+        quality: state.quality,
+        masterVolume: state.masterVolume,
+        reduceMotion: state.reduceMotion,
+        showCharacters: state.showCharacters,
+        customBackgroundImage: state.customBackgroundImage,
+      }),
+    }
+  )
+);

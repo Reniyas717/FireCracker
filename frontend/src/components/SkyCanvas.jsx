@@ -22,6 +22,8 @@ export default function SkyCanvas() {
   const customMessage = useStore((s) => s.customMessage);
   const setActiveParticles = useStore((s) => s.setActiveParticles);
   const setMessageInputOpen = useStore((s) => s.setMessageInputOpen);
+  const showCharacters   = useStore((s) => s.showCharacters);
+  const characterConfig  = useStore((s) => s.characterConfig);
 
   const selectedCrackerRef = useRef(selectedCracker);
   selectedCrackerRef.current = selectedCracker;
@@ -103,6 +105,10 @@ export default function SkyCanvas() {
   useEffect(() => { if (engineRef.current) engineRef.current.showDebug = showDebug; }, [showDebug]);
   useEffect(() => { if (engineRef.current) engineRef.current.setTheme(currentTheme); }, [currentTheme]);
   useEffect(() => { if (engineRef.current) engineRef.current.setCustomBackground(customBackgroundImage); }, [customBackgroundImage]);
+  useEffect(() => { if (engineRef.current) engineRef.current.setShowCharacters(showCharacters); }, [showCharacters]);
+  useEffect(() => {
+    if (engineRef.current) engineRef.current.characters.setCharacterConfig(characterConfig);
+  }, [characterConfig]);
 
   // Click handler
   const handleClick = useCallback((e) => {

@@ -11,6 +11,8 @@ import { AudioManager } from './AudioManager.js';
 import { CRACKER_CONFIGS, CRACKER_TYPES, getPaletteForCracker } from './CrackerConfigs.js';
 import { randomColorFromPalette, burstRadial } from './BurstShapes.js';
 import { THEMES } from './ThemeConfigs.js';
+import { CharacterSystem } from './CharacterSystem.js';
+import { CharacterRenderer } from './CharacterRenderer.js';
 
 const QUALITY_LIMITS = { low: 800, medium: 2000, high: 4000 };
 
@@ -38,6 +40,16 @@ export class FirecrackerEngine {
 
     // External callback for multiplayer broadcasting
     this.onCrackerEvent = null;
+
+    // ── Character system ──
+    this.showCharacters = true;
+    this.characters = new CharacterSystem();
+    this.charRenderer = new CharacterRenderer(this.renderer.ctx);
+    this._setupCharacterCallbacks();
+
+    // Light sources list fed to CharacterRenderer (updated each burst)
+    this._lightSources = [];
+    this._lightSourceTimer = 0;
   }
 
   // ——— Lifecycle ———
@@ -51,7 +63,9 @@ export class FirecrackerEngine {
 
   stop() { this.running = false; }
 
-  resize(width, height) { this.renderer.resize(width, height); }
+  resize(width, height) {
+    this.renderer.resize(width, height);
+  }
 
   setQuality(q) {
     this.quality = q;
@@ -70,6 +84,63 @@ export class FirecrackerEngine {
   }
 
   initAudio() { this.audio.init(); }
+
+  setShowCharacters(enabled) {
+    this.showCharacters = enabled;
+    this.characters.enabled = enabled;
+  }
+
+  _setupCharacterCallbacks() {
+    const groundY = () => this.renderer.height * 0.88;
+
+    // Dust puff callback
+    this.characters.setCallbacks(
+      // onDust
+      (x, y) => {
+        for (let i = 0; i < 3; i++) {
+          this.pool.acquire({
+            x: x + (Math.random() - 0.5) * 12,
+            y: groundY(),
+            vx: (Math.random() - 0.5) * 30,
+            vy: -8 - Math.random() * 18,
+            size: 3 + Math.random() * 4,
+            maxLife: 0.55,
+            gravity: 20,
+            drag: 0.93,
+            alpha: 0.6,
+            type: 'smoke',
+            smokeSize: 5 + Math.random() * 5,
+            baseColor: { r: 180, g: 160, b: 140 },
+            useColorTemp: false,
+            hasTrail: false,
+          });
+        }
+      },
+      // onSpark
+      (x, y) => {
+        for (let i = 0; i < 18; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 40 + Math.random() * 80;
+          this.pool.acquire({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 30,
+            size: 1.2 + Math.random() * 1.5,
+            maxLife: 0.35 + Math.random() * 0.25,
+            gravity: 120,
+            drag: 0.94,
+            alpha: 1,
+            type: 'default',
+            baseColor: { r: 255, g: 230, b: 160 },
+            useColorTemp: true,
+            hasTrail: true,
+            trailLength: 3,
+          });
+        }
+        this.renderer.triggerFlash(0.08);
+      }
+    );
+  }
 
   // ——— Main Loop ———
 
@@ -92,7 +163,31 @@ export class FirecrackerEngine {
     this.pool.update(dt, this.wind, this.renderer.width, this.renderer.height);
     this._processSplits();
 
+    // Decay light sources
+    this._lightSourceTimer += dt;
+    if (this._lightSourceTimer > 0.8) {
+      this._lightSources = this._lightSources.filter(ls => ls.born + 0.8 > this.elapsed);
+      this._lightSourceTimer = 0;
+    }
+
+    // Update characters
+    if (this.showCharacters) {
+      this.characters.update(dt, this.elapsed, this.renderer.width);
+    }
+
     this.renderer.drawBackground(this.elapsed);
+
+    // Draw characters BELOW particles (behind fireworks)
+    if (this.showCharacters) {
+      const chars   = this.characters.getAllCharacters();
+      const smoke   = this.characters.getEmberSmoke();
+      this.charRenderer.ctx = this.renderer.ctx;
+      this.charRenderer.drawAll(chars, smoke, this.elapsed, this._lightSources);
+
+      // Draw ember glows in canvas coordinates (not flipped)
+      this._drawEmberGlows(chars);
+    }
+
     this.renderer.drawParticles(this.pool);
     this.renderer.drawFlash(dt);
     this.renderer.endFrame();
@@ -102,6 +197,17 @@ export class FirecrackerEngine {
     }
 
     requestAnimationFrame(this._tick);
+  }
+
+  _drawEmberGlows(chars) {
+    const ctx = this.renderer.ctx;
+    for (const c of chars) {
+      if (!c.alive) continue;
+      if (c.state !== 'crouchLight' && c.state !== 'retreat') continue;
+      const ep = c.getEmberPos();
+      const flicker = 0.65 + Math.sin(this.elapsed * 14) * 0.25;
+      this.charRenderer.drawEmberGlow(ctx, ep.x, ep.y, flicker);
+    }
   }
 
   // ——— Cracker Spawning ———
@@ -117,7 +223,44 @@ export class FirecrackerEngine {
 
     if (config.placement === 'ground') y = groundY;
 
-    // Only broadcast if this is a locally initiated cracker
+    // We no longer broadcast here; we wait until the character actually ignites it
+    // so that remote players see the burst in sync with the local ignition.
+
+    // ── Character: spawn a lighter who walks in and triggers the ignition ──
+    if (this.showCharacters && !isRemote) {
+      // For ground crackers, character handles timing (fires ignition from retreat).
+      // For sky crackers (launch phase), character just plays the scene visually;
+      // ignition fires when they retreat to safe distance.
+      let ignitionFired = false;
+      const fireIgnition = () => {
+        if (ignitionFired) return;
+        ignitionFired = true;
+        this._fireIgnition(type, config, x, y, palette, message, isRemote);
+        // Add light source for character rim-lighting
+        this._lightSources.push({ x, y, radius: 280, intensity: 0.8, born: this.elapsed });
+      };
+
+      const poolFull = !this.characters.spawnLighter({
+        crackerX: x,
+        crackerY: groundY,
+        crackerType: type,
+        groundY,
+        onIgnition: fireIgnition,
+        canvasWidth: this.renderer.width,
+      });
+      if (poolFull) {
+        // Pool was full — fire immediately so cracker still works
+        fireIgnition();
+      }
+      return; // Character (or fallback) handles ignition
+    }
+
+    // Instant ignition (characters off, or remote)
+    this._fireIgnition(type, config, x, y, palette, message, isRemote);
+  }
+
+  _fireIgnition(type, config, x, y, palette, message, isRemote = false) {
+    // Broadcast the event to remote players ONLY when the cracker actually ignites locally
     if (!isRemote && this.onCrackerEvent) {
       this.onCrackerEvent({ type, x, y, message, timestamp: Date.now() });
     }
@@ -141,7 +284,7 @@ export class FirecrackerEngine {
     } else if (config.repeaterCake?.enabled) {
       this._startRepeaterCake(type, config, x, y, palette);
     } else if (config.burstPhase?.enabled) {
-      this._spawnBurst(config, x, y, palette, message);
+      this._spawnBurst(config, x, y, palette, message, type);
     }
   }
 
@@ -164,7 +307,7 @@ export class FirecrackerEngine {
     });
   }
 
-  _spawnBurst(config, x, y, palette, message = '') {
+  _spawnBurst(config, x, y, palette, message = '', crackerType = 'rocket') {
     const bp = config.burstPhase;
     if (!bp?.enabled) return;
 
@@ -212,6 +355,12 @@ export class FirecrackerEngine {
 
     if (bp.cameraShake && bp.cameraShake > 3) this.audio.triggerHaptic(80);
     else this.audio.triggerHaptic(30);
+
+    // Notify crowd to react and add burst light source
+    if (this.showCharacters) {
+      this.characters.notifyBurst(crackerType);
+      this._lightSources.push({ x, y, radius: 350, intensity: 1.0, born: this.elapsed });
+    }
 
     if (bp.spawnShockwave) {
       this.pool.acquire({
@@ -340,7 +489,7 @@ export class FirecrackerEngine {
 
       if (cracker.elapsed >= cracker.duration) {
         if (cracker.phase === 'launch') {
-          this._spawnBurst(cracker.config, cracker.rocketX, cracker.rocketY, cracker.palette, cracker.message);
+          this._spawnBurst(cracker.config, cracker.rocketX, cracker.rocketY, cracker.palette, cracker.message, cracker.type);
         }
         this.activeCrackers.splice(i, 1);
         continue;
@@ -638,5 +787,6 @@ export class FirecrackerEngine {
     this.pool.killAll();
     this.audio.dispose();
     this.activeCrackers = [];
+    this._lightSources = [];
   }
 }

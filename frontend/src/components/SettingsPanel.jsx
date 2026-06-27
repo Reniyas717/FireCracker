@@ -23,6 +23,8 @@ export default function SettingsPanel() {
   const setTheme = useStore((s) => s.setTheme);
   const customBackgroundImage = useStore((s) => s.customBackgroundImage);
   const setCustomBackgroundImage = useStore((s) => s.setCustomBackgroundImage);
+  const showCharacters = useStore((s) => s.showCharacters);
+  const setShowCharacters = useStore((s) => s.setShowCharacters);
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -205,6 +207,19 @@ export default function SettingsPanel() {
                 <span className={`text-xs font-semibold ${showDebug ? 'text-green-400' : 'text-white/70'}`}>Show Stats</span>
                 <div className={`w-8 h-4 rounded-full transition-colors relative ${showDebug ? 'bg-green-500' : 'bg-white/20'}`}>
                   <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${showDebug ? 'translate-x-4' : 'translate-x-1'}`} />
+                </div>
+              </button>
+            </div>
+
+            {/* Show Characters toggle + Customizer link */}
+            <div className="mt-4 flex gap-3">
+              <button 
+                onClick={() => setShowCharacters(!showCharacters)}
+                className={`flex-1 flex items-center justify-between p-4 rounded-2xl border transition-colors ${showCharacters ? 'bg-orange-500/10 border-orange-500/30' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+              >
+                <span className={`text-xs font-semibold ${showCharacters ? 'text-orange-400' : 'text-white/70'}`}>🎇 Characters</span>
+                <div className={`w-8 h-4 rounded-full transition-colors relative ${showCharacters ? 'bg-orange-500' : 'bg-white/20'}`}>
+                  <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${showCharacters ? 'translate-x-4' : 'translate-x-1'}`} />
                 </div>
               </button>
             </div>
