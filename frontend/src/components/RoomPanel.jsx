@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import { useStore } from '../store/useStore.js';
-import { Users, X, Copy, LogOut, Loader2, Globe } from 'lucide-react';
+import { Users, X, Copy, LogOut, Loader2, Globe, Check } from 'lucide-react';
 
 export default function RoomPanel() {
   const roomPanelOpen = useStore((s) => s.roomPanelOpen);
@@ -19,6 +19,7 @@ export default function RoomPanel() {
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
   const [connecting, setConnecting] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // We expose the socket instance on the window object so FirecrackerEngine can use it
   useEffect(() => {
@@ -90,6 +91,24 @@ export default function RoomPanel() {
     });
   };
 
+  const handleCopy = () => {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(roomCode);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = roomCode;
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      try { document.execCommand('copy'); } catch (err) {}
+      textArea.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const handleLeave = () => {
     const socket = window.roomSocket;
     if (socket && socket.connected) {
@@ -151,11 +170,11 @@ export default function RoomPanel() {
                 <div className="flex items-center justify-center gap-4">
                   <p className="text-4xl font-mono tracking-[0.3em] text-blue-400 drop-shadow-md ml-2 font-light">{roomCode}</p>
                   <button 
-                    onClick={() => navigator.clipboard.writeText(roomCode)}
+                    onClick={handleCopy}
                     className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-all shadow-sm"
                     title="Copy Code"
                   >
-                    <Copy size={16} />
+                    {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
                   </button>
                 </div>
               </div>

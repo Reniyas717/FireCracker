@@ -212,7 +212,7 @@ export class FirecrackerEngine {
 
   // ——— Cracker Spawning ———
 
-  lightCracker(type, x, y, message = '', isRemote = false) {
+  lightCracker(type, x, y, message = '', isRemote = false, remoteConfig = null) {
     this.audio.init();
 
     const config = CRACKER_CONFIGS[type];
@@ -223,48 +223,46 @@ export class FirecrackerEngine {
 
     if (config.placement === 'ground') y = groundY;
 
-    // We no longer broadcast here; we wait until the character actually ignites it
-    // so that remote players see the burst in sync with the local ignition.
+    // Broadcast immediately upon placement so remote clients can spawn the character.
+    if (!isRemote && this.onCrackerEvent) {
+      this.onCrackerEvent({ 
+        type, x, y, message, timestamp: Date.now(),
+        characterConfig: this.characters.localCharacter.config 
+      });
+    }
 
     // ── Character: spawn a lighter who walks in and triggers the ignition ──
-    if (this.showCharacters && !isRemote) {
-      // For ground crackers, character handles timing (fires ignition from retreat).
-      // For sky crackers (launch phase), character just plays the scene visually;
-      // ignition fires when they retreat to safe distance.
+    if (this.showCharacters) {
       let ignitionFired = false;
       const fireIgnition = () => {
         if (ignitionFired) return;
         ignitionFired = true;
-        this._fireIgnition(type, config, x, y, palette, message, isRemote);
+        this._fireIgnition(type, config, x, y, palette, message);
         // Add light source for character rim-lighting
         this._lightSources.push({ x, y, radius: 280, intensity: 0.8, born: this.elapsed });
       };
 
-      const poolFull = !this.characters.spawnLighter({
-        crackerX: x,
-        crackerY: groundY,
-        crackerType: type,
-        groundY,
-        onIgnition: fireIgnition,
-        canvasWidth: this.renderer.width,
-      });
-      if (poolFull) {
-        // Pool was full — fire immediately so cracker still works
+      if (!isRemote) {
+        const poolFull = !this.characters.spawnLighter({
+          crackerX: x, crackerY: groundY, crackerType: type, groundY, onIgnition: fireIgnition, canvasWidth: this.renderer.width,
+        });
+        if (poolFull) fireIgnition();
+      } else if (remoteConfig) {
+        const poolFull = !this.characters.spawnRemoteLighter({
+          crackerX: x, crackerY: groundY, crackerType: type, groundY, onIgnition: fireIgnition, canvasWidth: this.renderer.width, config: remoteConfig
+        });
+        if (poolFull) fireIgnition();
+      } else {
         fireIgnition();
       }
-      return; // Character (or fallback) handles ignition
+      return; 
     }
 
-    // Instant ignition (characters off, or remote)
-    this._fireIgnition(type, config, x, y, palette, message, isRemote);
+    // Instant ignition (characters off)
+    this._fireIgnition(type, config, x, y, palette, message);
   }
 
-  _fireIgnition(type, config, x, y, palette, message, isRemote = false) {
-    // Broadcast the event to remote players ONLY when the cracker actually ignites locally
-    if (!isRemote && this.onCrackerEvent) {
-      this.onCrackerEvent({ type, x, y, message, timestamp: Date.now() });
-    }
-
+  _fireIgnition(type, config, x, y, palette, message) {
     if (config.launchPhase?.enabled) {
       this._startLaunchPhase(type, config, x, y, palette, message);
     } else if (config.continuousEmitter?.enabled) {
@@ -775,9 +773,9 @@ export class FirecrackerEngine {
 
   handleRemoteCracker(event) {
     // Replay a cracker event from another player
-    const { type, x, y, message } = event;
+    const { type, x, y, message, characterConfig } = event;
     // Call lightCracker with isRemote = true to prevent broadcasting it back
-    this.lightCracker(type, x, y, message || '', true);
+    this.lightCracker(type, x, y, message || '', true, characterConfig);
   }
 
   // ——— Cleanup ———

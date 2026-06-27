@@ -455,7 +455,8 @@ class Character {
 export class CharacterSystem {
   constructor() {
     this.enabled   = true;
-    this.character = new Character();
+    this.localCharacter = new Character();
+    this.remoteCharacters = [];
 
     this._onSpawnDust  = null;
     this._onSpawnSpark = null;
@@ -466,7 +467,8 @@ export class CharacterSystem {
   }
 
   setCharacterConfig(cfg) {
-    this.character.setConfig(cfg);
+    this.config = cfg;
+    this.localCharacter.setConfig(cfg);
   }
 
   setCallbacks(onDust, onSpark) {
@@ -481,7 +483,7 @@ export class CharacterSystem {
   spawnLighter({ crackerX, crackerY, crackerType, groundY, onIgnition, canvasWidth }) {
     if (!this.enabled) return false;
 
-    const c = this.character;
+    const c = this.localCharacter;
 
     // If character is mid-light or retreating, fire immediately
     if (c.alive && (c.state === 'crouchLight' || c.state === 'retreat')) {
@@ -495,29 +497,46 @@ export class CharacterSystem {
     return true;
   }
 
+  spawnRemoteLighter({ crackerX, crackerY, crackerType, groundY, onIgnition, canvasWidth, config }) {
+    if (!this.enabled) return false;
+
+    const c = new Character();
+    c.setConfig(config);
+
+    const onSpark = (x, y) => { if (this._onSpawnSpark) this._onSpawnSpark(x, y); };
+    const onDust  = (x, y) => { if (this._onSpawnDust)  this._onSpawnDust(x, y);  };
+
+    c.spawn(crackerX, crackerY, crackerType, groundY, onSpark, onIgnition, onDust, canvasWidth);
+    this.remoteCharacters.push(c);
+    return true;
+  }
+
   notifyBurst(crackerType) {
-    // Character will react if they're in react/idle state
-    if (this.character.alive && this.character.state === 'idle') {
-      this.character.reactFamily = REACT_FAMILY[crackerType] || 'fountain';
-      this.character.state = 'react';
-      this.character.reactTimer = 0;
+    for (const c of this.getAllCharacters()) {
+      if (c.state === 'idle') {
+        c.reactFamily = REACT_FAMILY[crackerType] || 'fountain';
+        c.state = 'react';
+        c.reactTimer = 0;
+      }
     }
   }
 
   update(dt, time, canvasWidth) {
-    const c = this.character;
-
-    if (c.alive) {
-      // Clamp during walkIn so character starts at actual canvas edge
-      if (c.state === 'walkIn') {
-        c.x = Math.max(-60, Math.min(canvasWidth + 60, c.x));
-      }
-      c.update(dt, time);
-
-      if (c.state === 'walkOut' && c.isOffScreen(canvasWidth)) {
-        c.alive = false;
+    const all = [this.localCharacter, ...this.remoteCharacters];
+    for (const c of all) {
+      if (c.alive) {
+        if (c.state === 'walkIn') {
+          c.x = Math.max(-60, Math.min(canvasWidth + 60, c.x));
+        }
+        c.update(dt, time);
+        if (c.state === 'walkOut' && c.isOffScreen(canvasWidth)) {
+          c.alive = false;
+        }
       }
     }
+    
+    // Clean up dead remote characters to prevent memory leaks
+    this.remoteCharacters = this.remoteCharacters.filter(c => c.alive);
 
     this._updateSmoke(dt);
   }
@@ -535,24 +554,25 @@ export class CharacterSystem {
     this._smokeTimer += dt;
     if (this._smokeTimer > 0.07) {
       this._smokeTimer = 0;
-      const c = this.character;
-      if (c.alive && (c.state === 'crouchLight' || c.state === 'retreat')) {
-        const ep = c.getEmberPos();
-        this._smoke.push({
-          x: ep.x + (Math.random() - 0.5) * 3,
-          y: ep.y - 2,
-          vx: (Math.random() - 0.5) * 7,
-          life: 0.5 + Math.random() * 0.3,
-          maxLife: 0.5 + Math.random() * 0.3,
-          size: 1.8 + Math.random() * 2.2,
-          alpha: 0.3,
-        });
+      for (const c of this.getAllCharacters()) {
+        if (c.state === 'crouchLight' || c.state === 'retreat') {
+          const ep = c.getEmberPos();
+          this._smoke.push({
+            x: ep.x + (Math.random() - 0.5) * 3,
+            y: ep.y - 2,
+            vx: (Math.random() - 0.5) * 7,
+            life: 0.5 + Math.random() * 0.3,
+            maxLife: 0.5 + Math.random() * 0.3,
+            size: 1.8 + Math.random() * 2.2,
+            alpha: 0.3,
+          });
+        }
       }
     }
   }
 
   getAllCharacters() {
-    return this.character.alive ? [this.character] : [];
+    return [this.localCharacter, ...this.remoteCharacters].filter(c => c.alive);
   }
 
   getEmberSmoke() { return this._smoke; }
