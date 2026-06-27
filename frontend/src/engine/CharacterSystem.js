@@ -339,6 +339,11 @@ class Character {
   }
 
   _idle(time) {
+    if (this.stateTimer > 30) {
+      this._goto('walkOut');
+      return;
+    }
+
     const sway    = Math.sin(time * 0.7 + this.idleSwayPhase) * 0.04;
     const breathe = Math.sin(time * 1.2 + this.idleSwayPhase) * 1.5;
     this.pose = {
@@ -456,7 +461,7 @@ export class CharacterSystem {
   constructor() {
     this.enabled   = true;
     this.localCharacter = new Character();
-    this.remoteCharacters = [];
+    this.remoteCharacters = new Map();
 
     this._onSpawnDust  = null;
     this._onSpawnSpark = null;
@@ -497,17 +502,21 @@ export class CharacterSystem {
     return true;
   }
 
-  spawnRemoteLighter({ crackerX, crackerY, crackerType, groundY, onIgnition, canvasWidth, config }) {
+  spawnRemoteLighter({ crackerX, crackerY, crackerType, groundY, onIgnition, canvasWidth, config, playerId }) {
     if (!this.enabled) return false;
 
-    const c = new Character();
+    let c = this.remoteCharacters.get(playerId);
+    if (!c) {
+      c = new Character();
+      this.remoteCharacters.set(playerId, c);
+    }
+
     c.setConfig(config);
 
     const onSpark = (x, y) => { if (this._onSpawnSpark) this._onSpawnSpark(x, y); };
     const onDust  = (x, y) => { if (this._onSpawnDust)  this._onSpawnDust(x, y);  };
 
     c.spawn(crackerX, crackerY, crackerType, groundY, onSpark, onIgnition, onDust, canvasWidth);
-    this.remoteCharacters.push(c);
     return true;
   }
 
@@ -522,7 +531,7 @@ export class CharacterSystem {
   }
 
   update(dt, time, canvasWidth) {
-    const all = [this.localCharacter, ...this.remoteCharacters];
+    const all = [this.localCharacter, ...Array.from(this.remoteCharacters.values())];
     for (const c of all) {
       if (c.alive) {
         if (c.state === 'walkIn') {
@@ -535,8 +544,12 @@ export class CharacterSystem {
       }
     }
     
-    // Clean up dead remote characters to prevent memory leaks
-    this.remoteCharacters = this.remoteCharacters.filter(c => c.alive);
+    // Clean up dead remote characters from the Map
+    for (const [id, c] of this.remoteCharacters.entries()) {
+      if (!c.alive) {
+        this.remoteCharacters.delete(id);
+      }
+    }
 
     this._updateSmoke(dt);
   }
@@ -572,7 +585,7 @@ export class CharacterSystem {
   }
 
   getAllCharacters() {
-    return [this.localCharacter, ...this.remoteCharacters].filter(c => c.alive);
+    return [this.localCharacter, ...Array.from(this.remoteCharacters.values())].filter(c => c.alive);
   }
 
   getEmberSmoke() { return this._smoke; }

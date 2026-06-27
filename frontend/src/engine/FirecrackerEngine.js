@@ -18,6 +18,7 @@ const QUALITY_LIMITS = { low: 800, medium: 2000, high: 4000 };
 
 export class FirecrackerEngine {
   constructor(canvas) {
+    this.playerId = Math.random().toString(36).substring(2, 9);
     this.canvas = canvas;
     this.pool = new ParticlePool(QUALITY_LIMITS.high);
     this.renderer = new Renderer(canvas);
@@ -227,6 +228,7 @@ export class FirecrackerEngine {
     if (!isRemote && this.onCrackerEvent) {
       this.onCrackerEvent({ 
         type, x, y, message, timestamp: Date.now(),
+        playerId: this.playerId,
         characterConfig: this.characters.localCharacter.config 
       });
     }
@@ -249,7 +251,7 @@ export class FirecrackerEngine {
         if (poolFull) fireIgnition();
       } else if (remoteConfig) {
         const poolFull = !this.characters.spawnRemoteLighter({
-          crackerX: x, crackerY: groundY, crackerType: type, groundY, onIgnition: fireIgnition, canvasWidth: this.renderer.width, config: remoteConfig
+          crackerX: x, crackerY: groundY, crackerType: type, groundY, onIgnition: fireIgnition, canvasWidth: this.renderer.width, config: remoteConfig.characterConfig, playerId: remoteConfig.playerId
         });
         if (poolFull) fireIgnition();
       } else {
@@ -773,9 +775,9 @@ export class FirecrackerEngine {
 
   handleRemoteCracker(event) {
     // Replay a cracker event from another player
-    const { type, x, y, message, characterConfig } = event;
-    // Call lightCracker with isRemote = true to prevent broadcasting it back
-    this.lightCracker(type, x, y, message || '', true, characterConfig);
+    const { type, x, y, message, characterConfig, playerId } = event;
+    // Call lightCracker with isRemote = true and the remote config + playerId
+    this.lightCracker(type, x, y, message || '', true, { characterConfig, playerId });
   }
 
   // ——— Cleanup ———
